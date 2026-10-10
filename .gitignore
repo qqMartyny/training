@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local config & secrets ###
+.env
+application-local.yml
+src/main/resources/application-local.yml

@@ -1,0 +1,445 @@
+openapi: 3.0.3
+info:
+  title: ShopFlow Order Service API
+  version: 1.3.0
+  description: |
+    REST API сервиса заказов. Все запросы покупателя проходят через API Gateway, который
+    проверяет JWT и передаёт идентификатор покупателя в заголовке `X-Customer-Id`.
+
+    Эндпоинты с тегом `internal` доступны только из внутренней сети.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: catalog
+  - name: cart
+  - name: checkout
+  - name: orders
+  - name: internal
+
+paths:
+  /api/v1/products:
+    get:
+      tags: [catalog]
+      summary: Список активных товаров
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Product' }
+
+  /api/v1/products/{productId}:
+    get:
+      tags: [catalog]
+      summary: Карточка товара
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/products/{productId}/price:
+    patch:
+      tags: [catalog, internal]
+      summary: Изменить цену (админка категорийного менеджера)
+      description: Новая цена видна покупателям сразу после ответа.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [price]
+              properties:
+                price: { type: number, minimum: 0.01, example: 6990.00 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/cart:
+    get:
+      tags: [cart]
+      summary: Корзина покупателя
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: OK. Если корзины нет, возвращается пустая.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartView' }
+
+  /api/v1/cart/items:
+    post:
+      tags: [cart]
+      summary: Добавить товар в корзину
+      description: Повторное добавление того же товара увеличивает количество.
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, quantity]
+              properties:
+                productId: { type: integer, format: int64, example: 1001 }
+                quantity: { type: integer, minimum: 1, maximum: 99, example: 1 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/BusinessError' }
+
+  /api/v1/cart/items/{productId}:
+    delete:
+      tags: [cart]
+      summary: Удалить товар из корзины
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartView' }
+
+  /api/v1/cart/promo-code:
+    put:
+      tags: [cart]
+      summary: Применить промокод
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, maxLength: 32, example: SALE15 }
+      responses:
+        '200':
+          description: Промокод применён
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartView' }
+        '422':
+          description: |
+            Промокод не применён. `code`: `PROMO_CODE_NOT_FOUND`, `PROMO_CODE_EXPIRED`,
+            `PROMO_CODE_MIN_AMOUNT_NOT_REACHED`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/checkout:
+    post:
+      tags: [checkout]
+      summary: Оформить заказ из корзины и запустить оплату
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentMethod]
+              properties:
+                paymentMethod: { $ref: '#/components/schemas/PaymentMethod' }
+                paymentToken:
+                  type: string
+                  description: Токен платёжного виджета. Обязателен для `CARD`.
+                  example: tok_ok
+      responses:
+        '201':
+          description: |
+            Заказ создан. `status`:
+            * `PAID` — карта, оплата прошла;
+            * `AWAITING_PAYMENT` — СБП/крипто, ждём callback; в `payment` есть `qrPayload` или `cryptoAddress` + `cryptoAmount`;
+            * `PAYMENT_FAILED` — отказ банка, корзина сохранена.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Недостаточно товара (`OUT_OF_STOCK`). Остатки не изменились, заказ не создан.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: |
+            `CART_EMPTY`, `PROMO_CODE_INVALID`, `PAYMENT_TOKEN_REQUIRED`, `PAYMENT_METHOD_NOT_SUPPORTED`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/orders:
+    get:
+      tags: [orders]
+      summary: Заказы покупателя (новые сверху)
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OrderSummary' }
+
+  /api/v1/orders/{orderId}:
+    get:
+      tags: [orders]
+      summary: Заказ покупателя
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404':
+          description: Заказ не найден **или принадлежит другому покупателю**.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/orders/{orderId}/cancel:
+    post:
+      tags: [orders]
+      summary: Отменить заказ
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Заказ в статусе, из которого отмена невозможна (`ILLEGAL_STATUS_TRANSITION`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/orders/{orderId}/status:
+    patch:
+      tags: [internal]
+      summary: Изменить статус (сервис доставки)
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/OrderStatus' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Недопустимый переход (`ILLEGAL_STATUS_TRANSITION`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/v1/payments/callback:
+    post:
+      tags: [internal]
+      summary: Уведомление провайдера о результате платежа (СБП, крипто)
+      description: |
+        Доставка at-least-once: одно и то же уведомление может прийти несколько раз.
+        Повторное уведомление по уже завершённому платежу возвращает `200` и ничего не меняет.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [externalId, status]
+              properties:
+                externalId: { type: string, example: sbp_6f1c7e0a-... }
+                status: { type: string, enum: [SUCCEEDED, FAILED] }
+                failureReason: { type: string }
+      responses:
+        '200': { description: Принято }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  parameters:
+    CustomerId:
+      name: X-Customer-Id
+      in: header
+      required: true
+      schema: { type: integer, format: int64 }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Ошибка валидации (`VALIDATION_ERROR`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Не найдено (`NOT_FOUND`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    BusinessError:
+      description: Нарушение бизнес-правила
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    Money:
+      type: number
+      description: Сумма в рублях, 2 знака после запятой
+      example: 7990.00
+
+    PaymentMethod:
+      type: string
+      enum: [CARD, SBP, CRYPTO]
+
+    OrderStatus:
+      type: string
+      enum: [NEW, AWAITING_PAYMENT, PAID, PAYMENT_FAILED, SHIPPED, DELIVERED, CANCELLED]
+
+    PromoCodeStatus:
+      type: string
+      enum: [NONE, APPLIED, NOT_FOUND, EXPIRED, MIN_AMOUNT_NOT_REACHED]
+
+    Product:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        sku: { type: string }
+        name: { type: string }
+        price: { $ref: '#/components/schemas/Money' }
+        active: { type: boolean }
+
+    CartView:
+      type: object
+      properties:
+        customerId: { type: integer, format: int64 }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId: { type: integer, format: int64 }
+              productName: { type: string }
+              unitPrice: { $ref: '#/components/schemas/Money' }
+              quantity: { type: integer }
+              lineTotal: { $ref: '#/components/schemas/Money' }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        total:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          minimum: 0
+        promoCode: { type: string, nullable: true }
+        promoCodeStatus: { $ref: '#/components/schemas/PromoCodeStatus' }
+
+    CheckoutResponse:
+      type: object
+      properties:
+        orderId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        total: { $ref: '#/components/schemas/Money' }
+        payment:
+          type: object
+          properties:
+            method: { $ref: '#/components/schemas/PaymentMethod' }
+            status: { type: string, enum: [PENDING, SUCCEEDED, FAILED] }
+            qrPayload: { type: string, nullable: true, description: 'SBP: содержимое QR-кода' }
+            cryptoAddress: { type: string, nullable: true, description: 'CRYPTO: адрес для перевода' }
+            cryptoAmount:
+              type: number
+              nullable: true
+              description: 'CRYPTO: сумма к переводу, 8 знаков после запятой'
+              example: 0.00061915
+            cryptoCurrency: { type: string, nullable: true, example: BTC }
+            failureReason: { type: string, nullable: true }
+
+    OrderSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        total: { $ref: '#/components/schemas/Money' }
+        createdAt: { type: string, format: date-time }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        paymentMethod: { $ref: '#/components/schemas/PaymentMethod' }
+        promoCode: { type: string, nullable: true }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        paymentFee: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+        items:
+          type: array
+          description: Все позиции заказа. Сумма `discount` по позициям равна `discount` заказа.
+          items:
+            type: object
+            properties:
+              productId: { type: integer, format: int64 }
+              productName: { type: string }
+              unitPrice: { $ref: '#/components/schemas/Money' }
+              quantity: { type: integer }
+              discount: { $ref: '#/components/schemas/Money' }
+        createdAt: { type: string, format: date-time }
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: NOT_FOUND }
+        message: { type: string }
+        details: { type: array, items: { type: string } }
+        timestamp: { type: string, format: date-time }
