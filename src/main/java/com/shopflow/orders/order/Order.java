@@ -2,8 +2,8 @@ package com.shopflow.orders.order;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import com.shopflow.orders.payment.PaymentMethod;
@@ -53,7 +53,7 @@ public class Order {
 
 	@OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
 	@OrderBy("id")
-	private Set<OrderItem> items = new HashSet<>();
+	private List<OrderItem> items = new ArrayList<>();
 
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
@@ -86,9 +86,17 @@ public class Order {
 		items.add(new OrderItem(this, productId, productName, unitPrice, quantity, discount));
 	}
 
-	public void setStatus(OrderStatus status) {
-		this.status = status;
-		this.updatedAt = Instant.now();
+	/**
+	 * @return предыдущий статус
+	 */
+	public OrderStatus changeStatus(OrderStatus target) {
+		if (!status.canTransitionTo(target)) {
+			throw new IllegalStatusTransitionException(status, target);
+		}
+		OrderStatus previous = status;
+		status = target;
+		updatedAt = Instant.now();
+		return previous;
 	}
 
 	public UUID getId() {
@@ -127,7 +135,7 @@ public class Order {
 		return total;
 	}
 
-	public Set<OrderItem> getItems() {
+	public List<OrderItem> getItems() {
 		return items;
 	}
 

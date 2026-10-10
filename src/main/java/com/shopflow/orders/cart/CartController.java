@@ -30,12 +30,12 @@ public class CartController {
 
 	@PostMapping("/items")
 	public CartView addItem(@RequestHeader(Headers.CUSTOMER_ID) Long customerId,
-			@RequestBody AddItemRequest request) {
+			@Valid @RequestBody AddItemRequest request) {
 		return cartService.addItem(customerId, request);
 	}
 
 	@DeleteMapping("/items/{productId}")
-	public Cart removeItem(@RequestHeader(Headers.CUSTOMER_ID) Long customerId, @PathVariable Long productId) {
+	public CartView removeItem(@RequestHeader(Headers.CUSTOMER_ID) Long customerId, @PathVariable Long productId) {
 		return cartService.removeItem(customerId, productId);
 	}
 

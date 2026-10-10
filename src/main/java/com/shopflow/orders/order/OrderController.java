@@ -32,12 +32,12 @@ public class OrderController {
 
 	@GetMapping("/{orderId}")
 	public OrderResponse get(@RequestHeader(Headers.CUSTOMER_ID) Long customerId, @PathVariable UUID orderId) {
-		return OrderResponse.from(orderService.getOrder(orderId));
+		return orderService.getOrder(customerId, orderId);
 	}
 
 	@PostMapping("/{orderId}/cancel")
 	public OrderResponse cancel(@RequestHeader(Headers.CUSTOMER_ID) Long customerId, @PathVariable UUID orderId) {
-		return OrderResponse.from(orderService.cancel(orderId));
+		return orderService.cancel(customerId, orderId);
 	}
 
 	/**
@@ -45,7 +45,7 @@ public class OrderController {
 	 */
 	@PatchMapping("/{orderId}/status")
 	public OrderResponse changeStatus(@PathVariable UUID orderId, @Valid @RequestBody ChangeStatusRequest request) {
-		return OrderResponse.from(orderService.changeStatus(orderId, request.status()));
+		return orderService.changeStatus(orderId, request.status());
 	}
 
 }

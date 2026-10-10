@@ -22,17 +22,17 @@ public class ProductController {
 	}
 
 	@GetMapping
-	public List<Product> list() {
+	public List<ProductDto> list() {
 		return productService.findActive();
 	}
 
 	@GetMapping("/{id}")
-	public Product get(@PathVariable Long id) {
+	public ProductDto get(@PathVariable Long id) {
 		return productService.getProduct(id);
 	}
 
 	@PatchMapping("/{id}/price")
-	public Product changePrice(@PathVariable Long id, @Valid @RequestBody ChangePriceRequest request) {
+	public ProductDto changePrice(@PathVariable Long id, @Valid @RequestBody ChangePriceRequest request) {
 		return productService.changePrice(id, request.price());
 	}
 

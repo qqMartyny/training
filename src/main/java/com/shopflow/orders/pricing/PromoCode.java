@@ -5,6 +5,8 @@ import java.time.Instant;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -15,11 +17,9 @@ public class PromoCode {
 	@Id
 	private String code;
 
-	/**
-	 * Тип скидки: процент или фиксированная сумма.
-	 */
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false)
-	private String type;
+	private DiscountType type;
 
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal value;
@@ -39,7 +39,7 @@ public class PromoCode {
 	protected PromoCode() {
 	}
 
-	public PromoCode(String code, String type, BigDecimal value, BigDecimal minOrderAmount, Instant validFrom,
+	public PromoCode(String code, DiscountType type, BigDecimal value, BigDecimal minOrderAmount, Instant validFrom,
 			Instant validTo) {
 		this.code = code;
 		this.type = type;
@@ -57,7 +57,7 @@ public class PromoCode {
 		return code;
 	}
 
-	public String getType() {
+	public DiscountType getType() {
 		return type;
 	}
 

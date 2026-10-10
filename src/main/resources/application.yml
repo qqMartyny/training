@@ -7,7 +7,6 @@ spring:
     password: ${DB_PASSWORD:shopflow}
   jpa:
     open-in-view: false
-    show-sql: true
     hibernate:
       ddl-auto: validate
     properties:
@@ -27,8 +26,11 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
       acks: all
+      properties:
+        spring.json.add.type.headers: false
+        enable.idempotence: true
 
 shopflow:
   kafka:
@@ -39,6 +41,7 @@ shopflow:
       merchant-id: ${SBP_MERCHANT_ID:MA0000012345}
       qr-base-url: ${SBP_QR_BASE_URL:https://sbp-sandbox.shopflow.test/qr}
     crypto:
+      api-key: ${CRYPTO_API_KEY:sandbox-key}
       currency: BTC
       rub-rate: ${CRYPTO_BTC_RUB_RATE:9000000}
       fee-percent: 1.5

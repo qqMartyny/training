@@ -17,25 +17,29 @@ public class PaymentService {
 
 	private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
-	private final PaymentProcessor paymentProcessor;
+	private final PaymentProcessorRegistry registry;
 
 	private final PaymentRepository paymentRepository;
 
 	private final OrderService orderService;
 
-	public PaymentService(PaymentProcessor paymentProcessor, PaymentRepository paymentRepository,
+	public PaymentService(PaymentProcessorRegistry registry, PaymentRepository paymentRepository,
 			OrderService orderService) {
-		this.paymentProcessor = paymentProcessor;
+		this.registry = registry;
 		this.paymentRepository = paymentRepository;
 		this.orderService = orderService;
 	}
 
+	/**
+	 * Проводит оплату у провайдера и сохраняет платёж. Вызывается вне транзакции БД:
+	 * внешний HTTP-вызов не должен держать соединение с базой.
+	 */
 	public PaymentResult pay(UUID orderId, Long customerId, PaymentMethod method, BigDecimal amount,
 			String paymentToken) {
 		PaymentRequest request = new PaymentRequest(orderId, customerId, amount, paymentToken);
 		PaymentResult result;
 		try {
-			result = paymentProcessor.process(request);
+			result = registry.get(method).process(request);
 		}
 		catch (RuntimeException ex) {
 			log.warn("Payment provider error for order {}: {}", orderId, ex.getMessage());
@@ -50,6 +54,13 @@ public class PaymentService {
 	public void handleCallback(PaymentCallbackRequest callback) {
 		Payment payment = paymentRepository.findByExternalId(callback.externalId())
 			.orElseThrow(() -> NotFoundException.of("Payment", callback.externalId()));
+		if (payment.getStatus().isFinal()) {
+			log.info("Duplicate callback for payment {} ignored (status {})", payment.getId(), payment.getStatus());
+			return;
+		}
+		if (callback.status() == PaymentStatus.PENDING) {
+			return;
+		}
 		payment.complete(callback.status(), callback.failureReason());
 		OrderStatus target = callback.status() == PaymentStatus.SUCCEEDED ? OrderStatus.PAID
 				: OrderStatus.PAYMENT_FAILED;

@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "stock_items")
@@ -16,7 +17,7 @@ public class StockItem {
 	@Column(nullable = false)
 	private int available;
 
-	@Column(nullable = false)
+	@Version
 	private long version;
 
 	protected StockItem() {

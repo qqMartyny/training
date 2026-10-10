@@ -61,12 +61,7 @@ public class Cart {
 	}
 
 	public Optional<CartItem> findItem(Long productId) {
-		for (CartItem item : items) {
-			if (item.getProductId() == productId) {
-				return Optional.of(item);
-			}
-		}
-		return Optional.empty();
+		return items.stream().filter(item -> Objects.equals(item.getProductId(), productId)).findFirst();
 	}
 
 	public void applyPromoCode(String promoCode) {

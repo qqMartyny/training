@@ -7,8 +7,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
-import com.shopflow.orders.cart.CartService;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -28,8 +26,9 @@ class PricingServiceTest {
 	@BeforeEach
 	void setUp() {
 		when(promoCodeRepository.findByCodeIgnoreCase(anyString())).thenReturn(Optional.empty());
-		pricingService = new PricingService(promoCodeRepository, new DiscountCalculator(), new DiscountAllocator(),
-				mock(CartService.class), Clock.fixed(NOW, ZoneOffset.UTC));
+		pricingService = new PricingService(promoCodeRepository, new DiscountAllocator(),
+				List.of(new PercentageDiscountPolicy(), new FixedAmountDiscountPolicy()),
+				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Test
@@ -45,7 +44,7 @@ class PricingServiceTest {
 
 	@Test
 	void appliesPercentagePromoCode() {
-		givenPromo(new PromoCode("SALE15", "PERCENT", new BigDecimal("15"), BigDecimal.ZERO,
+		givenPromo(new PromoCode("SALE15", DiscountType.PERCENTAGE, new BigDecimal("15"), BigDecimal.ZERO,
 				NOW.minusSeconds(60), NOW.plusSeconds(60)));
 
 		PriceBreakdown result = pricingService.quote(List.of(line(1001L, "1000.00", 1)), "SALE15");
@@ -57,18 +56,29 @@ class PricingServiceTest {
 
 	@Test
 	void appliesFixedAmountPromoCode() {
-		givenPromo(new PromoCode("MINUS500", "FIXED", new BigDecimal("500"), new BigDecimal("3000"),
+		givenPromo(new PromoCode("MINUS500", DiscountType.FIXED_AMOUNT, new BigDecimal("500"), new BigDecimal("3000"),
 				NOW.minusSeconds(60), NOW.plusSeconds(60)));
 
 		PriceBreakdown result = pricingService.quote(List.of(line(1001L, "3500.00", 1)), "MINUS500");
 
-		assertThat(result.discount());
-		assertThat(result.total());
+		assertThat(result.discount()).isEqualByComparingTo("500.00");
+		assertThat(result.total()).isEqualByComparingTo("3000.00");
+	}
+
+	@Test
+	void fixedDiscountNeverMakesTotalNegative() {
+		givenPromo(new PromoCode("WELCOME1000", DiscountType.FIXED_AMOUNT, new BigDecimal("1000"), BigDecimal.ZERO,
+				NOW.minusSeconds(60), NOW.plusSeconds(60)));
+
+		PriceBreakdown result = pricingService.quote(List.of(line(1005L, "390.00", 1)), "WELCOME1000");
+
+		assertThat(result.discount()).isEqualByComparingTo("390.00");
+		assertThat(result.total()).isEqualByComparingTo("0.00");
 	}
 
 	@Test
 	void rejectsPromoCodeBelowMinimumAmount() {
-		givenPromo(new PromoCode("MINUS500", "FIXED", new BigDecimal("500"), new BigDecimal("3000"),
+		givenPromo(new PromoCode("MINUS500", DiscountType.FIXED_AMOUNT, new BigDecimal("500"), new BigDecimal("3000"),
 				NOW.minusSeconds(60), NOW.plusSeconds(60)));
 
 		PriceBreakdown result = pricingService.quote(List.of(line(1001L, "2999.99", 1)), "MINUS500");
@@ -79,7 +89,7 @@ class PricingServiceTest {
 
 	@Test
 	void rejectsExpiredPromoCode() {
-		givenPromo(new PromoCode("SALE15", "PERCENT", new BigDecimal("15"), BigDecimal.ZERO,
+		givenPromo(new PromoCode("SALE15", DiscountType.PERCENTAGE, new BigDecimal("15"), BigDecimal.ZERO,
 				NOW.minusSeconds(120), NOW.minusSeconds(60)));
 
 		PriceBreakdown result = pricingService.quote(List.of(line(1001L, "1000.00", 1)), "SALE15");

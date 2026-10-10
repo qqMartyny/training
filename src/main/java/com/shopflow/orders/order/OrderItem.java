@@ -1,7 +1,6 @@
 package com.shopflow.orders.order;
 
 import java.math.BigDecimal;
-import java.util.Objects;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -74,22 +73,6 @@ public class OrderItem {
 
 	public BigDecimal getDiscount() {
 		return discount;
-	}
-
-	@Override
-	public boolean equals(Object o) {
-		if (this == o) {
-			return true;
-		}
-		if (!(o instanceof OrderItem other)) {
-			return false;
-		}
-		return Objects.equals(id, other.id);
-	}
-
-	@Override
-	public int hashCode() {
-		return Objects.hash(id);
 	}
 
 }

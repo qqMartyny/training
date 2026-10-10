@@ -78,6 +78,9 @@ public class Payment {
 	}
 
 	public void complete(PaymentStatus finalStatus, String failureReason) {
+		if (status.isFinal()) {
+			throw new IllegalStateException("Payment " + id + " is already " + status);
+		}
 		this.status = finalStatus;
 		this.failureReason = failureReason;
 		this.updatedAt = Instant.now();

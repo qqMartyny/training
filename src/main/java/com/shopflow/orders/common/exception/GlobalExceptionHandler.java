@@ -16,6 +16,11 @@ public class GlobalExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+	@ExceptionHandler(NotFoundException.class)
+	public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException ex) {
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorResponse.of("NOT_FOUND", ex.getMessage()));
+	}
+
 	@ExceptionHandler(ConflictException.class)
 	public ResponseEntity<ErrorResponse> handleConflict(ConflictException ex) {
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(ErrorResponse.of(ex.getCode(), ex.getMessage()));

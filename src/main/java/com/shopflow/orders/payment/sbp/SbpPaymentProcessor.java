@@ -3,6 +3,7 @@ package com.shopflow.orders.payment.sbp;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import com.shopflow.orders.payment.PaymentMethod;
 import com.shopflow.orders.payment.PaymentProcessor;
 import com.shopflow.orders.payment.PaymentRequest;
 import com.shopflow.orders.payment.PaymentResult;
@@ -22,6 +23,11 @@ public class SbpPaymentProcessor implements PaymentProcessor {
 
 	public SbpPaymentProcessor(SbpProperties properties) {
 		this.properties = properties;
+	}
+
+	@Override
+	public PaymentMethod method() {
+		return PaymentMethod.SBP;
 	}
 
 	@Override

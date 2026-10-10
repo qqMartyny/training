@@ -1,48 +1,55 @@
 package com.shopflow.orders.order;
 
-import java.math.BigDecimal;
-
 import com.shopflow.orders.AbstractIntegrationTest;
-import com.shopflow.orders.common.web.Headers;
-import com.shopflow.orders.payment.PaymentMethod;
+import com.shopflow.orders.ApiClient;
 import org.junit.jupiter.api.Test;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.annotation.Transactional;
-
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@Transactional
 class OrderApiIT extends AbstractIntegrationTest {
-
-	@Autowired
-	private OrderRepository orderRepository;
 
 	@Test
 	void returnsOrderWithItems() throws Exception {
-		long customerId = newCustomerId();
-		Order order = new Order(customerId, PaymentMethod.CARD, null, new BigDecimal("7990.00"), BigDecimal.ZERO,
-				BigDecimal.ZERO);
-		order.addItem(1001L, "Механическая клавиатура Keyforge K1", new BigDecimal("7990.00"), 1, BigDecimal.ZERO);
-		orderRepository.save(order);
+		ApiClient api = new ApiClient(mockMvc, newCustomerId());
+		api.addToCart(1005L, 1).addToCart(1002L, 1);
+		String orderId = api.checkoutAndGetOrderId("CARD", "tok_ok");
 
-		mockMvc.perform(get("/api/v1/orders/{id}", order.getId()).header(Headers.CUSTOMER_ID, customerId))
+		api.order(orderId)
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.id").value(order.getId().toString()))
-			.andExpect(jsonPath("$.items.length()").value(1));
+			.andExpect(jsonPath("$.id").value(orderId))
+			.andExpect(jsonPath("$.items.length()").value(2));
 	}
 
 	@Test
-	void listsCustomerOrders() throws Exception {
-		long customerId = newCustomerId();
-		orderRepository.save(new Order(customerId, PaymentMethod.SBP, null, new BigDecimal("390.00"), BigDecimal.ZERO,
-				BigDecimal.ZERO));
+	void customerCannotSeeSomeoneElsesOrder() throws Exception {
+		ApiClient owner = new ApiClient(mockMvc, newCustomerId());
+		owner.addToCart(1005L, 1);
+		String orderId = owner.checkoutAndGetOrderId("CARD", "tok_ok");
 
-		mockMvc.perform(get("/api/v1/orders").header(Headers.CUSTOMER_ID, customerId))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.length()").value(1));
+		ApiClient stranger = new ApiClient(mockMvc, newCustomerId());
+		stranger.order(orderId).andExpect(status().isNotFound());
+		stranger.cancel(orderId).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void deliveredOrderCannotBeCancelled() throws Exception {
+		ApiClient api = new ApiClient(mockMvc, newCustomerId());
+		api.addToCart(1005L, 1);
+		String orderId = api.checkoutAndGetOrderId("CARD", "tok_ok");
+		api.changeStatus(orderId, "SHIPPED").andExpect(status().isOk());
+		api.changeStatus(orderId, "DELIVERED").andExpect(status().isOk());
+
+		api.cancel(orderId)
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("ILLEGAL_STATUS_TRANSITION"));
+	}
+
+	@Test
+	void unknownOrderReturns404() throws Exception {
+		new ApiClient(mockMvc, newCustomerId()).order("00000000-0000-0000-0000-000000000000")
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
 	}
 
 }

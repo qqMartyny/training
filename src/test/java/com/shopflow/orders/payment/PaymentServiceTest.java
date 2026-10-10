@@ -1,6 +1,7 @@
 package com.shopflow.orders.payment;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -20,31 +22,51 @@ class PaymentServiceTest {
 
 	private final OrderService orderService = mock(OrderService.class);
 
-	private final PaymentProcessor processor = mock(PaymentProcessor.class);
+	private final PaymentProcessor sbp = mock(PaymentProcessor.class);
 
-	private final PaymentService paymentService = new PaymentService(processor, paymentRepository, orderService);
+	private PaymentService paymentService() {
+		when(sbp.method()).thenReturn(PaymentMethod.SBP);
+		return new PaymentService(new PaymentProcessorRegistry(List.of(sbp)), paymentRepository, orderService);
+	}
 
 	@Test
 	void marksOrderPaidOnSuccessfulCallback() {
-		Payment payment = Payment.from(UUID.randomUUID(), PaymentMethod.SBP, new BigDecimal("100.00"),
-				PaymentResult.pendingSbp("sbp_1", "qr"));
+		PaymentService service = paymentService();
+		Payment payment = pendingPayment();
 		when(paymentRepository.findByExternalId("sbp_1")).thenReturn(Optional.of(payment));
 
-		paymentService.handleCallback(new PaymentCallbackRequest("sbp_1", PaymentStatus.SUCCEEDED, null));
+		service.handleCallback(new PaymentCallbackRequest("sbp_1", PaymentStatus.SUCCEEDED, null));
 
 		assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
 		verify(orderService).changeStatus(payment.getOrderId(), OrderStatus.PAID);
 	}
 
 	@Test
-	void treatsProviderExceptionAsFailedPayment() {
-		when(processor.process(any())).thenThrow(new IllegalStateException("timeout"));
+	void ignoresDuplicateCallback() {
+		PaymentService service = paymentService();
+		Payment payment = pendingPayment();
+		payment.complete(PaymentStatus.SUCCEEDED, null);
+		when(paymentRepository.findByExternalId("sbp_1")).thenReturn(Optional.of(payment));
 
-		PaymentResult result = paymentService.pay(UUID.randomUUID(), 1L, PaymentMethod.CARD, new BigDecimal("100.00"),
-				"tok");
+		service.handleCallback(new PaymentCallbackRequest("sbp_1", PaymentStatus.SUCCEEDED, null));
+
+		verify(orderService, never()).changeStatus(any(), any());
+	}
+
+	@Test
+	void treatsProviderExceptionAsFailedPayment() {
+		PaymentService service = paymentService();
+		when(sbp.process(any())).thenThrow(new IllegalStateException("timeout"));
+
+		PaymentResult result = service.pay(UUID.randomUUID(), 1L, PaymentMethod.SBP, new BigDecimal("100.00"), null);
 
 		assertThat(result.status()).isEqualTo(PaymentStatus.FAILED);
 		verify(paymentRepository).save(any(Payment.class));
+	}
+
+	private static Payment pendingPayment() {
+		return Payment.from(UUID.randomUUID(), PaymentMethod.SBP, new BigDecimal("100.00"),
+				PaymentResult.pendingSbp("sbp_1", "qr"));
 	}
 
 }

@@ -4,79 +4,74 @@ import java.math.BigDecimal;
 
 import com.shopflow.orders.cart.CartQuote;
 import com.shopflow.orders.cart.CartService;
-import com.shopflow.orders.inventory.InventoryService;
+import com.shopflow.orders.common.exception.BusinessException;
 import com.shopflow.orders.order.Order;
 import com.shopflow.orders.order.OrderService;
 import com.shopflow.orders.order.OrderStatus;
-import com.shopflow.orders.payment.PaymentFeeCalculator;
-import com.shopflow.orders.payment.PaymentMethod;
+import com.shopflow.orders.payment.PaymentProcessor;
+import com.shopflow.orders.payment.PaymentProcessorRegistry;
 import com.shopflow.orders.payment.PaymentResult;
 import com.shopflow.orders.payment.PaymentService;
 import com.shopflow.orders.payment.PaymentStatus;
-import com.shopflow.orders.pricing.PricedLine;
-import com.shopflow.orders.pricing.PricingService;
+import com.shopflow.orders.pricing.Money;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Оформление заказа: корзина → цены → заказ + резерв → оплата → итоговый статус.
+ * Фасад оформления заказа: корзина → цены → заказ + резерв → оплата → итоговый статус.
+ * <p>
+ * Сознательно НЕ транзакционный: оплата — внешний вызов, держать на время него транзакцию БД нельзя.
+ * Каждый шаг атомарен сам по себе, при неуспешной оплате выполняется компенсация (снятие резерва).
  */
 @Service
 public class CheckoutService {
 
 	private final CartService cartService;
 
-	private final PricingService pricingService;
-
 	private final OrderService orderService;
-
-	private final InventoryService inventoryService;
 
 	private final PaymentService paymentService;
 
-	private final PaymentFeeCalculator feeCalculator;
+	private final PaymentProcessorRegistry paymentProcessors;
 
-	public CheckoutService(CartService cartService, PricingService pricingService, OrderService orderService,
-			InventoryService inventoryService, PaymentService paymentService, PaymentFeeCalculator feeCalculator) {
+	public CheckoutService(CartService cartService, OrderService orderService, PaymentService paymentService,
+			PaymentProcessorRegistry paymentProcessors) {
 		this.cartService = cartService;
-		this.pricingService = pricingService;
 		this.orderService = orderService;
-		this.inventoryService = inventoryService;
 		this.paymentService = paymentService;
-		this.feeCalculator = feeCalculator;
+		this.paymentProcessors = paymentProcessors;
 	}
 
 	public CheckoutResponse checkout(Long customerId, CheckoutRequest request) {
-		CartQuote quote = pricingService.quoteForCustomer(customerId);
-		BigDecimal fee = feeCalculator.calculate(request.paymentMethod(), quote.breakdown().total());
+		CartQuote quote = cartService.quote(customerId);
+		if (quote.breakdown().promoCodeRejected()) {
+			throw new BusinessException("PROMO_CODE_INVALID",
+					"Promo code " + quote.breakdown().promoCode() + " is " + quote.breakdown().promoCodeStatus());
+		}
 
-		Order order = createOrderAndReserveStock(quote, request.paymentMethod(), fee);
+		PaymentProcessor processor = paymentProcessors.get(request.paymentMethod());
+		if (processor.requiresPaymentToken() && (request.paymentToken() == null || request.paymentToken().isBlank())) {
+			throw new BusinessException("PAYMENT_TOKEN_REQUIRED", "paymentToken is required for " + processor.method());
+		}
+		BigDecimal fee = Money.of(processor.fee(quote.breakdown().total()));
 
-		PaymentResult result = paymentService.pay(order.getId(), customerId, request.paymentMethod(),
-				order.getTotal(), request.paymentToken());
+		Order order = orderService.placeOrder(quote, processor.method(), fee);
 
-		OrderStatus status = result.status() == PaymentStatus.SUCCEEDED ? OrderStatus.PAID
-				: OrderStatus.PAYMENT_FAILED;
+		PaymentResult result = paymentService.pay(order.getId(), customerId, processor.method(), order.getTotal(),
+				request.paymentToken());
+
+		OrderStatus status = switch (result.status()) {
+			case SUCCEEDED -> OrderStatus.PAID;
+			case PENDING -> OrderStatus.AWAITING_PAYMENT;
+			case FAILED -> OrderStatus.PAYMENT_FAILED;
+		};
 		orderService.changeStatus(order.getId(), status);
 
-		if (status == OrderStatus.PAID) {
+		if (result.status() != PaymentStatus.FAILED) {
 			cartService.clear(customerId);
 		}
 		return new CheckoutResponse(order.getId(), status, order.getTotal(),
-				CheckoutResponse.PaymentInfo.of(request.paymentMethod(), result));
-	}
-
-	/**
-	 * Заказ и резерв должны создаваться атомарно: либо всё, либо ничего.
-	 */
-	@Transactional
-	public Order createOrderAndReserveStock(CartQuote quote, PaymentMethod paymentMethod, BigDecimal fee) {
-		Order order = orderService.createOrder(quote, paymentMethod, fee);
-		for (PricedLine line : quote.breakdown().lines()) {
-			inventoryService.reserve(line.productId(), line.quantity());
-		}
-		return order;
+				CheckoutResponse.PaymentInfo.of(processor.method(), result));
 	}
 
 }

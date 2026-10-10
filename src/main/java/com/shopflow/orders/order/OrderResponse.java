@@ -14,7 +14,7 @@ public record OrderResponse(UUID id, OrderStatus status, PaymentMethod paymentMe
 	public record Item(Long productId, String productName, BigDecimal unitPrice, int quantity, BigDecimal discount) {
 	}
 
-	public static OrderResponse from(Order order) {
+	static OrderResponse from(Order order) {
 		List<Item> items = order.getItems()
 			.stream()
 			.map(i -> new Item(i.getProductId(), i.getProductName(), i.getUnitPrice(), i.getQuantity(), i.getDiscount()))

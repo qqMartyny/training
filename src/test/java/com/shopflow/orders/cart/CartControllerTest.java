@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -53,6 +54,19 @@ class CartControllerTest {
 					{"productId": 1001, "quantity": 2}
 					"""))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void rejectsNonPositiveQuantity() throws Exception {
+		mockMvc.perform(post("/api/v1/cart/items").header(Headers.CUSTOMER_ID, 7)
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("""
+					{"productId": 1001, "quantity": -5}
+					"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+		verifyNoInteractions(cartService);
 	}
 
 	@Test

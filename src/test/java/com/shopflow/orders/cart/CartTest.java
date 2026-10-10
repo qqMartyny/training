@@ -10,8 +10,8 @@ class CartTest {
 	void mergesQuantityWhenSameProductAddedTwice() {
 		Cart cart = new Cart(42L);
 
-		cart.addItem(1L, 1);
-		cart.addItem(1L, 2);
+		cart.addItem(1001L, 1);
+		cart.addItem(1001L, 2);
 
 		assertThat(cart.getItems()).hasSize(1);
 		assertThat(cart.getItems().get(0).getQuantity()).isEqualTo(3);
@@ -21,21 +21,21 @@ class CartTest {
 	void keepsDifferentProductsAsSeparateLines() {
 		Cart cart = new Cart(42L);
 
-		cart.addItem(1L, 1);
-		cart.addItem(2L, 1);
+		cart.addItem(1001L, 1);
+		cart.addItem(1002L, 1);
 
-		assertThat(cart.getItems()).extracting(CartItem::getProductId).containsExactly(1L, 2L);
+		assertThat(cart.getItems()).extracting(CartItem::getProductId).containsExactly(1001L, 1002L);
 	}
 
 	@Test
 	void removesProduct() {
 		Cart cart = new Cart(42L);
-		cart.addItem(1L, 1);
-		cart.addItem(2L, 1);
+		cart.addItem(1001L, 1);
+		cart.addItem(1002L, 1);
 
-		cart.removeItem(1L);
+		cart.removeItem(1001L);
 
-		assertThat(cart.getItems()).extracting(CartItem::getProductId).containsExactly(2L);
+		assertThat(cart.getItems()).extracting(CartItem::getProductId).containsExactly(1002L);
 	}
 
 }

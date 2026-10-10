@@ -1,5 +1,6 @@
 package com.shopflow.orders.payment.card;
 
+import com.shopflow.orders.payment.PaymentMethod;
 import com.shopflow.orders.payment.PaymentProcessor;
 import com.shopflow.orders.payment.PaymentRequest;
 import com.shopflow.orders.payment.PaymentResult;
@@ -17,6 +18,16 @@ public class CardPaymentProcessor implements PaymentProcessor {
 
 	public CardPaymentProcessor(CardGatewayClient gatewayClient) {
 		this.gatewayClient = gatewayClient;
+	}
+
+	@Override
+	public PaymentMethod method() {
+		return PaymentMethod.CARD;
+	}
+
+	@Override
+	public boolean requiresPaymentToken() {
+		return true;
 	}
 
 	@Override
