@@ -1,0 +1,69 @@
+asyncapi: 2.6.0
+info:
+  title: ShopFlow Order Events
+  version: 1.3.0
+  description: |
+    События жизненного цикла заказа. Потребители: Notification Service (письма и push-уведомления),
+    Delivery Service (создание и сопровождение отправлений).
+
+    Гарантии со стороны Order Service:
+    * событие публикуется только после того, как изменение сохранено в БД;
+    * ключ сообщения равен `orderId`, поэтому события одного заказа попадают в одну партицию
+      и читаются в порядке публикации;
+    * доставка at-least-once: потребитель дедуплицирует сообщения по `eventId`.
+servers:
+  local:
+    url: localhost:9092
+    protocol: kafka
+channels:
+  shopflow.order-events:
+    description: 3 партиции, retention 7 дней
+    subscribe:
+      message:
+        $ref: '#/components/messages/OrderStatusChanged'
+components:
+  messages:
+    OrderStatusChanged:
+      contentType: application/json
+      bindings:
+        kafka:
+          key:
+            type: string
+            format: uuid
+            description: orderId
+      payload:
+        type: object
+        required: [eventId, orderId, customerId, status, total, occurredAt]
+        properties:
+          eventId:
+            type: string
+            format: uuid
+            description: Уникален для каждого события, используется для дедупликации
+          orderId:
+            type: string
+            format: uuid
+          customerId:
+            type: integer
+            format: int64
+          previousStatus:
+            type: string
+            nullable: true
+            description: null для события создания заказа
+          status:
+            type: string
+            enum: [NEW, AWAITING_PAYMENT, PAID, PAYMENT_FAILED, SHIPPED, DELIVERED, CANCELLED]
+          total:
+            type: number
+          occurredAt:
+            type: string
+            format: date-time
+      examples:
+        - name: paid
+          payload:
+            eventId: 0b9a3c2e-7d8f-4b1e-9a0c-5d6e7f8a9b0c
+            orderId: 74125233-84ed-421d-9db3-b0ec99e51425
+            customerId: 42
+            previousStatus: NEW
+            status: PAID
+            total: 9894.00
+            occurredAt: '2026-10-01T12:00:00Z'

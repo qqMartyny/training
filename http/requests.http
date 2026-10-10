@@ -1,0 +1,133 @@
+### Сценарии для IntelliJ HTTP Client (или VS Code REST Client).
+### Переменные: customerId можно менять, чтобы начать «с чистой корзиной».
+@host = http://localhost:8080
+@customerId = 42
+
+### Health
+GET {{host}}/actuator/health
+
+### Каталог
+GET {{host}}/api/v1/products
+
+### Карточка товара
+GET {{host}}/api/v1/products/1001
+
+### Несуществующий товар (ожидаем 404)
+GET {{host}}/api/v1/products/999999
+
+### Изменить цену (админка)
+PATCH {{host}}/api/v1/products/1001/price
+Content-Type: application/json
+
+{ "price": 6990.00 }
+
+### ---------- Корзина ----------
+
+### Посмотреть корзину
+GET {{host}}/api/v1/cart
+X-Customer-Id: {{customerId}}
+
+### Добавить клавиатуру
+POST {{host}}/api/v1/cart/items
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "productId": 1001, "quantity": 1 }
+
+### Добавить мышь
+POST {{host}}/api/v1/cart/items
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "productId": 1002, "quantity": 1 }
+
+### Добавить кабель
+POST {{host}}/api/v1/cart/items
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "productId": 1005, "quantity": 1 }
+
+### Невалидное количество (ожидаем 400)
+POST {{host}}/api/v1/cart/items
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "productId": 1002, "quantity": -5 }
+
+### Удалить товар
+DELETE {{host}}/api/v1/cart/items/1005
+X-Customer-Id: {{customerId}}
+
+### Применить промокод
+PUT {{host}}/api/v1/cart/promo-code
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "code": "SALE15" }
+
+### ---------- Оформление ----------
+
+### Оплата картой (tok_ok | tok_declined | tok_error)
+POST {{host}}/api/v1/checkout
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "paymentMethod": "CARD", "paymentToken": "tok_ok" }
+
+> {% client.global.set("orderId", response.body.orderId); %}
+
+### Оплата через СБП
+POST {{host}}/api/v1/checkout
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "paymentMethod": "SBP" }
+
+> {% client.global.set("orderId", response.body.orderId); %}
+
+### Оплата криптовалютой
+POST {{host}}/api/v1/checkout
+X-Customer-Id: {{customerId}}
+Content-Type: application/json
+
+{ "paymentMethod": "CRYPTO" }
+
+> {% client.global.set("orderId", response.body.orderId); %}
+
+### ---------- Заказы ----------
+
+### Мои заказы
+GET {{host}}/api/v1/orders
+X-Customer-Id: {{customerId}}
+
+### Заказ
+GET {{host}}/api/v1/orders/{{orderId}}
+X-Customer-Id: {{customerId}}
+
+### Заказ глазами другого покупателя (ожидаем 404)
+GET {{host}}/api/v1/orders/{{orderId}}
+X-Customer-Id: 100500
+
+### Отменить заказ
+POST {{host}}/api/v1/orders/{{orderId}}/cancel
+X-Customer-Id: {{customerId}}
+
+### [internal] Сервис доставки: отправлен
+PATCH {{host}}/api/v1/orders/{{orderId}}/status
+Content-Type: application/json
+
+{ "status": "SHIPPED" }
+
+### [internal] Сервис доставки: доставлен
+PATCH {{host}}/api/v1/orders/{{orderId}}/status
+Content-Type: application/json
+
+{ "status": "DELIVERED" }
+
+### [internal] Callback провайдера СБП/крипто.
+### externalId берётся из таблицы payments: select external_id from payments where order_id = '...';
+POST {{host}}/api/v1/payments/callback
+Content-Type: application/json
+
+{ "externalId": "sbp_PASTE_HERE", "status": "SUCCEEDED" }
