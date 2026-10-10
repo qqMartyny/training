@@ -19,19 +19,35 @@ import static org.mockito.Mockito.when;
 class CryptoPaymentProcessorTest {
 
 	@Mock
-	private CryptoPaymentProcessor processor;
+	private CryptoPaymentProcessor processorMock;
+
+	@Mock 
+	private CryptoPaymentProperties properties;
 
 	@Test
 	void convertsRublesToBitcoin() {
-		when(processor.process(any())).thenReturn(
+		when(processorMock.process(any())).thenReturn(
 				PaymentResult.pendingCrypto("crypto_1", "bc1qtest", new BigDecimal("0.00050000"), "BTC"));
 
-		PaymentResult result = processor.process(new PaymentRequest(UUID.randomUUID(), 1L, new BigDecimal("4500.00"), null));
+		PaymentResult result = processorMock.process(new PaymentRequest(UUID.randomUUID(), 1L, new BigDecimal("4500.00"), null));
 
 		assertThat(result.status()).isEqualTo(PaymentStatus.PENDING);
 		assertThat(result.cryptoCurrency()).isEqualTo("BTC");
 		assertThat(result.cryptoAmount()).isPositive();
 		assertThat(result.cryptoAddress()).startsWith("bc1q");
+	}
+
+	@Test 
+	void fee_countsCorrectFee() {
+		CryptoPaymentProcessor processor = new CryptoPaymentProcessor(
+				new CryptoPaymentProperties(
+					"qwe",
+					"some",
+					BigDecimal.ONE,
+					BigDecimal.valueOf(12)
+				)
+		);
+		assertThat(processor.fee(BigDecimal.valueOf(100))).isEqualByComparingTo("12.00");
 	}
 
 }

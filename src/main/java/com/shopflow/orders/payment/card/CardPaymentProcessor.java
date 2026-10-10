@@ -1,5 +1,6 @@
 package com.shopflow.orders.payment.card;
 
+import com.shopflow.orders.payment.PaymentMethod;
 import com.shopflow.orders.payment.PaymentProcessor;
 import com.shopflow.orders.payment.PaymentRequest;
 import com.shopflow.orders.payment.PaymentResult;
@@ -28,6 +29,10 @@ public class CardPaymentProcessor implements PaymentProcessor {
 			return PaymentResult.failed(response.transactionId(), response.declineReason());
 		}
 		return PaymentResult.succeeded(response.transactionId());
+	}
+
+	public PaymentMethod method() {
+		return PaymentMethod.CARD;
 	}
 
 }

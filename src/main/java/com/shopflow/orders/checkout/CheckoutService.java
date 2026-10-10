@@ -1,6 +1,9 @@
 package com.shopflow.orders.checkout;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import com.shopflow.orders.cart.CartQuote;
 import com.shopflow.orders.cart.CartService;
@@ -8,8 +11,8 @@ import com.shopflow.orders.inventory.InventoryService;
 import com.shopflow.orders.order.Order;
 import com.shopflow.orders.order.OrderService;
 import com.shopflow.orders.order.OrderStatus;
-import com.shopflow.orders.payment.PaymentFeeCalculator;
 import com.shopflow.orders.payment.PaymentMethod;
+import com.shopflow.orders.payment.PaymentProcessor;
 import com.shopflow.orders.payment.PaymentResult;
 import com.shopflow.orders.payment.PaymentService;
 import com.shopflow.orders.payment.PaymentStatus;
@@ -35,21 +38,28 @@ public class CheckoutService {
 
 	private final PaymentService paymentService;
 
-	private final PaymentFeeCalculator feeCalculator;
+	private final Map<PaymentMethod, PaymentProcessor> paymentProcessorsMap = new HashMap<>();
 
 	public CheckoutService(CartService cartService, PricingService pricingService, OrderService orderService,
-			InventoryService inventoryService, PaymentService paymentService, PaymentFeeCalculator feeCalculator) {
+			InventoryService inventoryService, PaymentService paymentService, List<PaymentProcessor> paymentProcessors) {
 		this.cartService = cartService;
 		this.pricingService = pricingService;
 		this.orderService = orderService;
 		this.inventoryService = inventoryService;
 		this.paymentService = paymentService;
-		this.feeCalculator = feeCalculator;
+		for (PaymentProcessor paymentProcessor : paymentProcessors) {
+			paymentProcessorsMap.put(paymentProcessor.method(), paymentProcessor);
+		}
 	}
 
 	public CheckoutResponse checkout(Long customerId, CheckoutRequest request) {
 		CartQuote quote = pricingService.quoteForCustomer(customerId);
-		BigDecimal fee = feeCalculator.calculate(request.paymentMethod(), quote.breakdown().total());
+
+		if (!paymentProcessorsMap.containsKey(request.paymentMethod())) {
+			throw new IllegalStateException("Неподдерживаемый метод оплаты " + request.paymentMethod());
+		}
+		BigDecimal fee = paymentProcessorsMap.get(request.paymentMethod())
+				.fee(quote.breakdown().total());
 
 		Order order = createOrderAndReserveStock(quote, request.paymentMethod(), fee);
 

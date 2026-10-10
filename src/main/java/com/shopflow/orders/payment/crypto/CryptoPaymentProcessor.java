@@ -1,10 +1,12 @@
 package com.shopflow.orders.payment.crypto;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HexFormat;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+import com.shopflow.orders.payment.PaymentMethod;
 import com.shopflow.orders.payment.PaymentProcessor;
 import com.shopflow.orders.payment.PaymentRequest;
 import com.shopflow.orders.payment.PaymentResult;
@@ -32,10 +34,20 @@ public class CryptoPaymentProcessor implements PaymentProcessor {
 		return PaymentResult.pendingCrypto(externalId, newDepositAddress(), cryptoAmount, properties.currency());
 	}
 
+	@Override
+	public BigDecimal fee(BigDecimal amount) {
+		return  amount.multiply(properties.feePercent()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+	}
+
 	private String newDepositAddress() {
 		byte[] bytes = new byte[20];
 		ThreadLocalRandom.current().nextBytes(bytes);
 		return "bc1q" + HexFormat.of().formatHex(bytes);
+	}
+
+	@Override
+	public PaymentMethod method() {
+		return PaymentMethod.CRYPTO;
 	}
 
 }

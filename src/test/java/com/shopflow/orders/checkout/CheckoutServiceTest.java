@@ -10,8 +10,8 @@ import com.shopflow.orders.inventory.InventoryService;
 import com.shopflow.orders.order.Order;
 import com.shopflow.orders.order.OrderService;
 import com.shopflow.orders.order.OrderStatus;
-import com.shopflow.orders.payment.PaymentFeeCalculator;
 import com.shopflow.orders.payment.PaymentMethod;
+import com.shopflow.orders.payment.PaymentProcessor;
 import com.shopflow.orders.payment.PaymentResult;
 import com.shopflow.orders.payment.PaymentService;
 import com.shopflow.orders.payment.PaymentStatus;
@@ -42,8 +42,10 @@ class CheckoutServiceTest {
 
 	private final PaymentService paymentService = mock(PaymentService.class);
 
+	private final PaymentProcessor paymentProcessor = mock(PaymentProcessor.class);
+
 	private final CheckoutService checkoutService = new CheckoutService(cartService, pricingService, orderService,
-			inventoryService, paymentService, new PaymentFeeCalculator());
+			inventoryService, paymentService, List.of(paymentProcessor));
 
 	@Test
 	void paidByCardOrderBecomesPaidAndCartIsCleared() {
